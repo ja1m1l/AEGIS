@@ -10,6 +10,7 @@ export default function LayoutWrapper({ children }: { children: React.ReactNode 
     const { isDark } = useAppContext();
     const pathname = usePathname();
     const isAuthPage = pathname === '/login' || pathname === '/signup';
+    const isAdminPage = pathname.startsWith('/admin');
 
     return (
         <div className={`min-h-screen selection:bg-indigo-500/30 overflow-x-hidden transition-all duration-700 ease-in-out ${isDark ? 'bg-[#050505] text-white' : 'bg-[#fafafa] text-black'
@@ -37,8 +38,8 @@ export default function LayoutWrapper({ children }: { children: React.ReactNode 
                 />
             </div>
 
-            {!isAuthPage && <Header />}
-            {!isAuthPage && <SlidingNavbar isDark={isDark} />}
+            {!isAuthPage && !isAdminPage && <Header />}
+            {!isAuthPage && !isAdminPage && <SlidingNavbar isDark={isDark} />}
 
             <main className="relative z-10">
                 {children}
@@ -46,7 +47,8 @@ export default function LayoutWrapper({ children }: { children: React.ReactNode 
 
             {/* Footer / Aegis Guard Core Badge */}
             {/* Footer / Aegis Guard Core Badge */}
-            {!isAuthPage && (
+            {/* Footer / Aegis Guard Core Badge */}
+            {!isAuthPage && !isAdminPage && (
                 <div className={`fixed bottom-6 left-6 z-50 hidden sm:flex items-center gap-3 px-4 py-2 rounded-xl border backdrop-blur-2xl transition-all duration-500 hover:scale-100 scale-90 origin-bottom-left ${isDark ? 'bg-black/40 border-white/10 shadow-2xl shadow-indigo-500/20' : 'bg-white/80 border-black/10 shadow-xl'
                     }`}>
                     <div className="relative">

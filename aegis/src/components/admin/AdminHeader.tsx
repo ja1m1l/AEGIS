@@ -1,23 +1,26 @@
 "use client";
 
 import React from 'react';
-import { Sun, Moon, Bell, User, ShieldAlert } from 'lucide-react';
+import { Sun, Moon, Bell, LogOut, Shield } from 'lucide-react';
 import Link from 'next/link';
-import AegisLogo from './AegisLogo';
+import AegisLogo from '../ui/AegisLogo';
 import { useAppContext } from '../AppProvider';
 import { usePathname } from 'next/navigation';
+import { logout } from '@/actions/auth';
 
-const Header: React.FC = () => {
+const AdminHeader: React.FC = () => {
     const { isDark, toggleTheme } = useAppContext();
     const pathname = usePathname();
 
-    const isProfileActive = pathname === '/profile';
+    const handleLogout = async () => {
+        await logout();
+    };
 
     return (
         <header className={`fixed top-0 left-0 w-full z-[80] px-6 md:px-10 py-6 flex justify-between items-center transition-all duration-500 pointer-events-none ${isDark ? 'bg-gradient-to-b from-black/80 to-transparent' : 'bg-gradient-to-b from-white/80 to-transparent'
             }`}>
-            <div className="pointer-events-auto">
-                <Link href="/">
+            <div className="pointer-events-auto flex items-center gap-3">
+                <Link href="/admin/dashboard">
                     <AegisLogo isDark={isDark} />
                 </Link>
             </div>
@@ -36,27 +39,17 @@ const Header: React.FC = () => {
                         <Bell className="w-5 h-5 text-gray-400 group-hover:text-indigo-500 transition-colors" />
                         <div className="absolute top-0 right-0 w-2 h-2 bg-indigo-500 rounded-full border-2 border-inherit" />
                     </div>
-                    <Link
-                        href="/admin"
-                        className={`w-10 h-10 md:w-12 md:h-12 rounded-[1.25rem] border flex items-center justify-center cursor-pointer transition-all hover:scale-105 active:scale-95 ${pathname === '/admin'
-                            ? (isDark ? 'bg-indigo-500 border-indigo-500 shadow-[0_0_20px_rgba(99,102,241,0.5)]' : 'bg-black border-black')
-                            : (isDark ? 'border-white/10 bg-white/5' : 'border-black/10 bg-black/5 shadow-sm')
-                            }`}>
-                        <ShieldAlert className={`w-5 h-5 md:w-6 md:h-6 ${pathname === '/admin' ? 'text-white' : 'text-indigo-500'}`} />
-                    </Link>
 
-                    <Link
-                        href="/profile"
-                        className={`w-10 h-10 md:w-12 md:h-12 rounded-[1.25rem] border flex items-center justify-center cursor-pointer transition-all hover:scale-105 active:scale-95 ${isProfileActive
-                            ? (isDark ? 'bg-indigo-500 border-indigo-500 shadow-[0_0_20px_rgba(99,102,241,0.5)]' : 'bg-black border-black')
-                            : (isDark ? 'border-white/10 bg-white/5' : 'border-black/10 bg-black/5 shadow-sm')
+                    <button
+                        onClick={handleLogout}
+                        className={`w-10 h-10 md:w-12 md:h-12 rounded-[1.25rem] border flex items-center justify-center cursor-pointer transition-all hover:scale-105 active:scale-95 ${isDark ? 'border-red-500/20 bg-red-500/10 text-red-500 hover:bg-red-500/20' : 'border-red-500/20 bg-red-50 text-red-600 hover:bg-red-100'
                             }`}>
-                        <User className={`w-5 h-5 md:w-6 md:h-6 ${isProfileActive ? 'text-white' : ''}`} />
-                    </Link>
+                        <LogOut className="w-5 h-5 md:w-6 md:h-6" />
+                    </button>
                 </div>
             </div>
         </header>
     );
 };
 
-export default Header;
+export default AdminHeader;
