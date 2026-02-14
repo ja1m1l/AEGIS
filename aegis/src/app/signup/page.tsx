@@ -4,14 +4,17 @@ import dynamic from 'next/dynamic';
 
 import React, { useState } from 'react';
 import { Shield, Eye, EyeOff, ArrowRight, User, Lock, Mail, GraduationCap, Building, Check } from 'lucide-react';
+import { signup } from '@/actions/auth';
 
 const Antigravity = dynamic(() => import('../../components/AntigravityInteractive'), {
   ssr: false,
   loading: () => <div className="absolute inset-0 z-0 bg-transparent" />,
 });
 
+import { useAppContext } from '@/components/AppProvider';
+
 export default function SignUpPage() {
-  const [isDark, setIsDark] = useState(true);
+  const { isDark, toggleTheme } = useAppContext();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [formData, setFormData] = useState({
@@ -24,10 +27,22 @@ export default function SignUpPage() {
   });
   const [agreedToTerms, setAgreedToTerms] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Redirect to home page after successful signup
-    window.location.href = '/';
+
+    if (formData.password !== formData.confirmPassword) {
+      alert("Passwords do not match");
+      return;
+    }
+
+    const data = new FormData();
+    data.append('email', formData.email);
+    data.append('password', formData.password);
+    data.append('fullName', formData.fullName);
+    data.append('university', formData.university);
+    data.append('field', formData.field);
+
+    await signup(data);
   };
 
   const handleChange = (field: string, value: string) => {
@@ -35,8 +50,7 @@ export default function SignUpPage() {
   };
 
   return (
-    <div className={`min-h-screen flex items-center justify-center px-4 py-8 transition-all duration-700 ${isDark ? 'bg-[#050505] text-white' : 'bg-[#fafafa] text-black'
-      }`}>
+    <div className="min-h-screen flex items-center justify-center px-4 py-8">
       {/* Background Gradients */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
         <Antigravity
@@ -45,10 +59,6 @@ export default function SignUpPage() {
           ringRadius={4}
           color={isDark ? "#ffffff" : "#5227FF"}
         />
-        <div className={`absolute top-[-20%] left-[-10%] w-[80%] h-[80%] blur-[200px] rounded-full transition-all duration-1000 ${isDark ? 'bg-indigo-600/15 opacity-100' : 'bg-indigo-400/10 opacity-60'
-          }`} />
-        <div className={`absolute bottom-[-20%] right-[-10%] w-[80%] h-[80%] blur-[200px] rounded-full transition-all duration-1000 ${isDark ? 'bg-emerald-600/10 opacity-100' : 'bg-emerald-400/5 opacity-40'
-          }`} />
       </div>
 
       <div className="relative z-10 w-full max-w-lg">
@@ -275,7 +285,7 @@ export default function SignUpPage() {
         {/* Theme Toggle */}
         <div className="flex justify-center mt-12">
           <button
-            onClick={() => setIsDark(!isDark)}
+            onClick={toggleTheme}
             className={`p-3 rounded-full border transition-all ${isDark ? 'bg-white/5 border-white/10 hover:bg-white/10' : 'bg-black/5 border-black/10 hover:bg-black/10'
               }`}
           >

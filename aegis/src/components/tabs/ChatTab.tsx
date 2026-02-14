@@ -170,7 +170,7 @@ const ChatTab: React.FC<ChatTabProps> = ({ isDark, users }) => {
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 placeholder="Message..."
-                className={`flex-1 bg-transparent border-none focus:ring-0 text-sm md:text-base font-normal ${isDark ? 'placeholder-gray-500' : 'placeholder-gray-400'}`}
+                className={`focus:outline-none focus:ring-0 flex-1 bg-transparent border-none focus:ring-0 text-sm md:text-base font-normal ${isDark ? 'placeholder-gray-500' : 'placeholder-gray-400'}`}
               />
 
               {!message && (

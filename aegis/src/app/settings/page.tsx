@@ -1,8 +1,10 @@
 "use client";
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
+import { logout } from '@/actions/auth';
+import { useAppContext } from '@/components/AppProvider';
 import {
     ArrowLeft,
     User,
@@ -26,8 +28,8 @@ const SettingsCategory = ({ icon: Icon, title, description, color, onClick, isDa
     <button
         onClick={onClick}
         className={`w-full group flex items-center justify-between p-5 rounded-2xl border transition-all duration-300 active:scale-[0.98] ${isDark
-                ? 'bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/20'
-                : 'bg-white border-black/5 hover:bg-gray-50 hover:border-black/10 shadow-sm'
+            ? 'bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/20'
+            : 'bg-white border-black/5 hover:bg-gray-50 hover:border-black/10 shadow-sm'
             }`}>
         <div className="flex items-center gap-5">
             <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${isDark ? `bg-${color}-500/10 text-${color}-400` : `bg-${color}-50 text-${color}-600`
@@ -46,7 +48,7 @@ const SettingsCategory = ({ icon: Icon, title, description, color, onClick, isDa
 
 export default function SettingsPage() {
     const router = useRouter();
-    const [isDark, setIsDark] = useState(true);
+    const { isDark } = useAppContext();
 
     const categories = [
         {
@@ -134,10 +136,10 @@ export default function SettingsPage() {
                     ))}
 
                     <button
-                        onClick={() => router.push('/login')}
+                        onClick={async () => await logout()}
                         className={`w-full mt-8 p-5 rounded-2xl border transition-all duration-300 flex items-center justify-center gap-3 font-black uppercase tracking-widest text-xs active:scale-95 ${isDark
-                                ? 'bg-red-500/10 border-red-500/20 text-red-500 hover:bg-red-500/20'
-                                : 'bg-red-50 border-red-200 text-red-600 hover:bg-red-100'
+                            ? 'bg-red-500/10 border-red-500/20 text-red-500 hover:bg-red-500/20'
+                            : 'bg-red-50 border-red-200 text-red-600 hover:bg-red-100'
                             }`}>
                         <LogOut className="w-4 h-4" />
                         Sign Out
