@@ -62,6 +62,70 @@ export default function QuizDetailPage() {
 
     const data = QUIZ_DETAILS[id];
 
+    // Registration & Launch Logic
+    const [isRegistered, setIsRegistered] = useState(false);
+    const [startTime, setStartTime] = useState<Date | null>(null);
+    const [timeToStart, setTimeToStart] = useState<number | null>(null);
+
+    // Timer to check lobby availability
+    React.useEffect(() => {
+        if (!startTime) return;
+
+        const interval = setInterval(() => {
+            const now = new Date();
+            const diff = startTime.getTime() - now.getTime();
+            setTimeToStart(diff);
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, [startTime]);
+
+    // Mock Admin: Set start time initial default
+    const setMockStartTime = () => {
+        const now = new Date();
+        const start = new Date(now.getTime() + 10 * 60000); // 10 mins later default
+        setStartTime(start);
+    };
+
+    const handleRegister = () => {
+        setIsRegistered(true);
+        if (!startTime) setMockStartTime();
+    };
+
+    const getButtonState = () => {
+        if (!isRegistered) {
+            return {
+                text: "Register for Quiz",
+                disabled: false,
+                action: handleRegister,
+                icon: <CheckCircle2 className="w-4 h-4" />
+            };
+        }
+
+        if (!startTime) return { text: "Waiting for Schedule...", disabled: true, icon: <Clock className="w-4 h-4" /> };
+        if (timeToStart === null) return { text: "Loading...", disabled: true };
+
+        const minutesToStart = Math.floor(timeToStart / 60000);
+
+        // Use 5 minutes as the cut-off for lobby entry
+        if (minutesToStart > 5) { // e.g. 6 mins away -> disabled
+            return {
+                text: `Starts in ${minutesToStart} mins`,
+                disabled: true,
+                icon: <Clock className="w-4 h-4" />
+            };
+        }
+
+        return {
+            text: "Enter Lobby",
+            disabled: false,
+            action: () => router.push(`/quiz/lobby?start=${startTime.toISOString()}`),
+            icon: <Play className="w-4 h-4 fill-current" />
+        };
+    };
+
+    const buttonState = getButtonState();
+
     if (!data) return (
         <div className="min-h-screen flex items-center justify-center bg-black text-white font-bold">
             Quiz not found.
@@ -106,8 +170,24 @@ export default function QuizDetailPage() {
                         {data.difficulty} Level
                     </div>
 
-                    <h1 className="text-3xl md:text-5xl font-black mb-6 tracking-tight leading-tight">{data.title}</h1>
-                    <p className="text-lg opacity-60 mb-10 leading-relaxed">{data.description}</p>
+                    <h1 className="text-3xl md:text-5xl font-black mb-2 tracking-tight leading-tight">{data.title}</h1>
+
+                    {startTime && (
+                        <div className="mb-8 inline-flex flex-col items-center animate-in fade-in duration-500">
+                            <div className="px-5 py-2 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-500 text-sm font-black tracking-widest uppercase flex items-center gap-2 shadow-[0_0_15px_rgba(245,158,11,0.2)]">
+                                <Clock className="w-4 h-4" />
+                                Scheduled: {startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+
+                            {timeToStart && timeToStart > 5 * 60000 && (
+                                <span className="text-[10px] mt-3 opacity-50 font-bold uppercase tracking-widest">
+                                    Lobby opens at {new Date(startTime.getTime() - 5 * 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                            )}
+                        </div>
+                    )}
+
+                    {!startTime && <p className="text-lg opacity-60 mb-10 leading-relaxed max-w-lg mx-auto">{data.description}</p>}
 
                     <div className="grid grid-cols-3 gap-4 mb-10">
                         <div className={`p-4 rounded-2xl border ${isDark ? 'bg-black/20 border-white/5' : 'bg-gray-50 border-black/5'}`}>
@@ -129,16 +209,59 @@ export default function QuizDetailPage() {
 
                     <div className="flex flex-col gap-3 mb-12">
                         {data.topics.map((topic: string) => (
-                            <div key={topic} className="flex items-center gap-3 text-sm font-medium opacity-70">
+                            <div key={topic} className="flex items-center gap-3 text-sm font-medium opacity-70 justify-center">
                                 <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                                 {topic}
                             </div>
                         ))}
                     </div>
 
-                    <button className="w-full py-5 rounded-[1.5rem] bg-amber-500 hover:bg-amber-400 text-white font-black uppercase tracking-[0.25em] text-xs shadow-xl shadow-amber-500/20 transition-all active:scale-95 flex items-center justify-center gap-3">
-                        <Play className="w-4 h-4 fill-current" /> Initialize Session
+                    <button
+                        onClick={buttonState.action}
+                        disabled={buttonState.disabled}
+                        className={`w-full py-5 rounded-[1.5rem] font-black uppercase tracking-[0.25em] text-xs shadow-xl transition-all active:scale-95 flex items-center justify-center gap-3 ${buttonState.disabled
+                                ? 'bg-white/5 text-white/30 cursor-not-allowed border border-white/5'
+                                : 'bg-amber-500 hover:bg-amber-400 text-white shadow-amber-500/20'
+                            }`}
+                    >
+                        {buttonState.icon} {buttonState.text}
                     </button>
+
+                    {/* Admin Control (Simulation) */}
+                    <div className="mt-8 pt-6 border-t border-white/5 flex flex-col gap-2">
+                        <p className="text-[10px] uppercase font-bold opacity-30 tracking-widest">Admin Control (Simulation)</p>
+                        <div className="flex gap-2 justify-center flex-wrap">
+                            <button
+                                onClick={() => {
+                                    const now = new Date();
+                                    const nextHour = new Date(now);
+                                    nextHour.setHours(now.getHours() + 1, 0, 0, 0); // Next full hour (e.g. 1:00 PM)
+                                    setStartTime(nextHour);
+                                }}
+                                className="px-3 py-2 bg-white/5 rounded-lg text-[10px] font-bold hover:bg-white/10 active:scale-95 transition-all text-amber-500 border border-amber-500/20"
+                            >
+                                Set Next Hour (Wait Mode)
+                            </button>
+                            <button
+                                onClick={() => {
+                                    const now = new Date();
+                                    setStartTime(new Date(now.getTime() + 6 * 60000)); // Set to 6 mins (wait mode)
+                                }}
+                                className="px-3 py-2 bg-white/5 rounded-lg text-[10px] font-bold hover:bg-white/10 active:scale-95 transition-all"
+                            >
+                                Set +6 Mins
+                            </button>
+                            <button
+                                onClick={() => {
+                                    const now = new Date();
+                                    setStartTime(new Date(now.getTime() + 1 * 60000)); // Set to 1 min (ready mode)
+                                }}
+                                className="px-3 py-2 bg-white/5 rounded-lg text-[10px] font-bold hover:bg-white/10 active:scale-95 transition-all"
+                            >
+                                Set +1 Min
+                            </button>
+                        </div>
+                    </div>
 
                 </div>
             </div>
