@@ -5,6 +5,7 @@ import Header from './ui/Header';
 import SlidingNavbar from './ui/SlidingNavbar';
 import { useAppContext } from './AppProvider';
 import { usePathname } from 'next/navigation';
+import { Toaster } from 'sonner';
 
 export default function LayoutWrapper({ children }: { children: React.ReactNode }) {
     const { isDark } = useAppContext();
@@ -48,6 +49,7 @@ export default function LayoutWrapper({ children }: { children: React.ReactNode 
             {/* Footer / Aegis Guard Core Badge */}
             {/* Footer / Aegis Guard Core Badge */}
             {/* Footer / Aegis Guard Core Badge */}
+            {/* Footer / Aegis Guard Core Badge */}
             {!isAuthPage && !isAdminPage && (
                 <div className={`fixed bottom-6 left-6 z-50 hidden sm:flex items-center gap-3 px-4 py-2 rounded-xl border backdrop-blur-2xl transition-all duration-500 hover:scale-100 scale-90 origin-bottom-left ${isDark ? 'bg-black/40 border-white/10 shadow-2xl shadow-indigo-500/20' : 'bg-white/80 border-black/10 shadow-xl'
                     }`}>
@@ -61,6 +63,20 @@ export default function LayoutWrapper({ children }: { children: React.ReactNode 
                     </div>
                 </div>
             )}
+
+            <Toaster
+                position="top-center"
+                toastOptions={{
+                    className: isDark
+                        ? '!bg-black/80 !backdrop-blur-xl !border !border-white/10 !text-white !rounded-2xl !shadow-2xl !shadow-indigo-500/20'
+                        : '!bg-white/80 !backdrop-blur-xl !border !border-black/5 !text-black !rounded-2xl !shadow-xl',
+                    descriptionClassName: isDark ? '!text-gray-400' : '!text-gray-500',
+                    actionButtonStyle: {
+                        background: isDark ? '#ffffff' : '#000000',
+                        color: isDark ? '#000000' : '#ffffff',
+                    }
+                }}
+            />
         </div>
     );
 }
