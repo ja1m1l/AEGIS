@@ -6,11 +6,31 @@ import { Plus, X } from 'lucide-react';
 import { useAppContext } from '@/components/AppProvider';
 import { PREDEFINED_ROADMAPS, RoadmapItem } from '@/data/roadmapData';
 import RoadmapsTab from '@/components/tabs/RoadmapsTab';
+import { getRoadmaps, createRoadmap } from '@/actions/roadmaps';
+import { toast } from 'sonner';
 
 export default function AdminRoadmapsPage() {
     const { isDark } = useAppContext();
     const [roadmaps, setRoadmaps] = useState<RoadmapItem[]>(PREDEFINED_ROADMAPS);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
+
+    // Fetch roadmaps on mount
+    React.useEffect(() => {
+        const fetchRoadmaps = async () => {
+            try {
+                const dbRoadmaps = await getRoadmaps();
+                // Combine predefined and DB roadmaps, avoiding duplicates if any
+                // Typically DB roadmaps are dynamic. Predefined are static.
+                // We'll just append DB roadmaps.
+                setRoadmaps([...PREDEFINED_ROADMAPS, ...dbRoadmaps]);
+            } catch (error) {
+                console.error('Failed to fetch roadmaps:', error);
+                toast.error('Failed to load roadmaps');
+            }
+        };
+        fetchRoadmaps();
+    }, []);
 
     // New roadmap form state
     const [newRoadmap, setNewRoadmap] = useState<Partial<RoadmapItem>>({
@@ -21,23 +41,37 @@ export default function AdminRoadmapsPage() {
     });
     const [stepsInput, setStepsInput] = useState('');
 
-    const handleAddRoadmap = () => {
+    const handleAddRoadmap = async () => {
         if (!newRoadmap.title || !newRoadmap.field) return;
 
+        setIsLoading(true);
         const steps = stepsInput.split(',').map(s => s.trim()).filter(s => s.length > 0);
 
         const roadmapToAdd: RoadmapItem = {
-            id: Date.now(), // Simple ID generation
+            id: Date.now().toString(), // Use string ID for consistency
             title: newRoadmap.title || 'Untitled',
             field: newRoadmap.field || 'General',
             color: (newRoadmap.color as any) || 'blue',
             steps: steps.length > 0 ? steps : ['Step 1', 'Step 2', 'Step 3']
         };
 
-        setRoadmaps([roadmapToAdd, ...roadmaps]);
-        setIsModalOpen(false);
-        setNewRoadmap({ title: '', field: '', color: 'blue', steps: [] });
-        setStepsInput('');
+        try {
+            await createRoadmap(roadmapToAdd);
+
+            // Refresh list
+            const dbRoadmaps = await getRoadmaps();
+            setRoadmaps([...PREDEFINED_ROADMAPS, ...dbRoadmaps]);
+
+            setIsModalOpen(false);
+            setNewRoadmap({ title: '', field: '', color: 'blue', steps: [] });
+            setStepsInput('');
+            toast.success('Roadmap created successfully');
+        } catch (error) {
+            console.error('Error creating roadmap:', error);
+            toast.error('Failed to create roadmap');
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (
@@ -115,13 +149,13 @@ export default function AdminRoadmapsPage() {
 
                             <button
                                 onClick={handleAddRoadmap}
-                                disabled={!newRoadmap.title || !newRoadmap.field}
+                                disabled={isLoading || !newRoadmap.title || !newRoadmap.field}
                                 className={`w-full py-4 mt-4 rounded-xl font-black uppercase tracking-[0.2em] text-xs transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed ${isDark
-                                        ? 'bg-white text-black hover:bg-gray-200 shadow-[0_0_20px_rgba(255,255,255,0.1)]'
-                                        : 'bg-black text-white hover:bg-gray-800 shadow-xl'
+                                    ? 'bg-white text-black hover:bg-gray-200 shadow-[0_0_20px_rgba(255,255,255,0.1)]'
+                                    : 'bg-black text-white hover:bg-gray-800 shadow-xl'
                                     }`}
                             >
-                                Create Roadmap
+                                {isLoading ? 'Creating...' : 'Create Roadmap'}
                             </button>
                         </div>
                     </div>
