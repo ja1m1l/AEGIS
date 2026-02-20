@@ -32,6 +32,8 @@ function QuizLobbyContent() {
     useEffect(() => {
         if (!quizId) return;
 
+        let channel: any;
+
         const init = async () => {
             const [statusRes, profile] = await Promise.all([
                 getQuizSessionStatus(quizId),
@@ -49,7 +51,7 @@ function QuizLobbyContent() {
 
             // 2. Realtime Presence
             if (profile) {
-                const channel = supabase.channel(`quiz_lobby_${quizId}`, {
+                channel = supabase.channel(`quiz_lobby_${quizId}`, {
                     config: {
                         presence: {
                             key: profile.id,
@@ -57,38 +59,40 @@ function QuizLobbyContent() {
                     },
                 });
 
+                const updateParticipants = () => {
+                    const state = channel.presenceState();
+                    const uniqueUsers = Object.keys(state).map(key => {
+                        return state[key][0].user_info;
+                    });
+                    setParticipants(uniqueUsers);
+                };
+
                 channel
-                    .on('presence', { event: 'sync' }, () => {
-                        const state = channel.presenceState();
-                        const users = Object.values(state).flat().map((p: any) => p.user_info);
-                        setParticipants(users);
-                    })
-                    .on('presence', { event: 'join' }, ({ key, newPresences }) => {
-                        // Optional: show join notifications
-                    })
-                    .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
-                        // Optional: show leave notifications
-                    })
-                    .subscribe(async (status) => {
+                    .on('presence', { event: 'sync' }, updateParticipants)
+                    .on('presence', { event: 'join' }, updateParticipants)
+                    .on('presence', { event: 'leave' }, updateParticipants)
+                    .subscribe(async (status: string) => {
                         if (status === 'SUBSCRIBED') {
                             await channel.track({
                                 user_info: {
                                     id: profile.id,
-                                    name: profile.full_name || 'Anonymous Combatant',
+                                    name: profile.full_name || 'Anonymous Participant',
                                     handle: profile.handle || 'Guest',
                                     avatar: profile.avatar_url
                                 }
                             });
                         }
                     });
-
-                return () => {
-                    supabase.removeChannel(channel);
-                };
             }
         };
 
         init();
+
+        return () => {
+            if (channel) {
+                supabase.removeChannel(channel);
+            }
+        };
     }, [quizId, router]);
 
     // 3. Precise Countdown Sync
@@ -110,8 +114,12 @@ function QuizLobbyContent() {
                     console.log("Triggering auto-start...");
                     const res = await autoStartQuiz(quizId);
                     if (res.error) {
-                        setIsStarting(false);
-                        console.error("Auto-start failed:", res.error);
+                        if (res.error === "Quiz already live or finished") {
+                            router.push(`/quiz/play?id=${quizId}`);
+                        } else {
+                            setIsStarting(false);
+                            console.error("Auto-start failed:", res.error);
+                        }
                     } else {
                         console.log("Auto-start successful");
                     }
@@ -167,7 +175,7 @@ function QuizLobbyContent() {
 
     if (loading) return (
         <div className={`min-h-screen flex items-center justify-center font-black italic uppercase tracking-[0.5em] ${isDark ? 'bg-black text-white' : 'bg-white text-black'}`}>
-            Syncing Realtime Core...
+            Loading...
         </div>
     );
 
@@ -192,7 +200,7 @@ function QuizLobbyContent() {
                         <div className="text-center md:text-left">
                             <h1 className="text-5xl md:text-7xl font-black mb-4 tracking-tighter italic uppercase leading-none">{quiz?.title}</h1>
                             <div className="flex items-center gap-3 opacity-40 font-black uppercase tracking-[0.3em] text-[10px]">
-                                <ShieldCheck className="w-4 h-4 text-emerald-500" /> Authorized Participant
+                                <ShieldCheck className="w-4 h-4 text-emerald-500" /> Registered Participant
                             </div>
                         </div>
 
@@ -207,7 +215,7 @@ function QuizLobbyContent() {
                                         {formatTime(timeRemaining)}
                                     </div>
                                     <div className="text-[9px] uppercase font-black tracking-[0.3em] opacity-30 mt-3 italic">
-                                        Channel Start
+                                        Quiz Starts In
                                     </div>
                                 </div>
                             </div>
@@ -218,7 +226,7 @@ function QuizLobbyContent() {
                         <div className="flex items-center justify-center gap-4 mb-10">
                             <div className="h-px bg-white/10 flex-1" />
                             <Users className="w-6 h-6 opacity-30" />
-                            <h2 className="text-2xl font-black uppercase italic tracking-tight">Active Combatants ({participants.length})</h2>
+                            <h2 className="text-2xl font-black uppercase italic tracking-tight">Participants ({participants.length})</h2>
                             <div className="h-px bg-white/10 flex-1" />
                         </div>
 
@@ -246,7 +254,7 @@ function QuizLobbyContent() {
                         <div className="absolute inset-0 bg-gradient-to-r from-amber-500/5 via-transparent to-amber-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
                         <div className="text-xs opacity-50 flex items-center justify-center gap-3 font-black uppercase tracking-widest">
                             <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                            Synchronized Broadcast will begin automatically
+                            The assessment will begin automatically
                         </div>
                     </div>
                 </div>
@@ -258,7 +266,7 @@ function QuizLobbyContent() {
 
 export default function QuizLobbyPage() {
     return (
-        <Suspense fallback={<div className="min-h-screen bg-[#050505] text-white flex items-center justify-center font-black uppercase tracking-widest italic animate-pulse">Establishing Signal...</div>}>
+        <Suspense fallback={<div className="min-h-screen bg-[#050505] text-white flex items-center justify-center font-black uppercase tracking-widest italic animate-pulse">Loading Lobby...</div>}>
             <QuizLobbyContent />
         </Suspense>
     );

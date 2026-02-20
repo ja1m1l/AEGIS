@@ -15,6 +15,8 @@ import {
     Star
 } from 'lucide-react';
 import { useAppContext } from '../../../components/AppProvider';
+import { PREDEFINED_ROADMAPS } from '@/data/roadmapData';
+import { getRoadmaps } from '@/actions/roadmaps';
 
 const Antigravity = dynamic(() => import('../../../components/AntigravityInteractive'), {
     ssr: false,
@@ -438,18 +440,53 @@ export default function RoadmapDetailPage() {
     const id = params.id as string;
     const { isDark } = useAppContext();
 
-    // Derived data from static config
-    const data = ROADMAP_DETAILS[id];
-
-    // Initialize state with data.modules if available
+    const [data, setData] = useState<any>(null);
     const [modules, setModules] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        if (data && modules.length === 0) {
-            setModules(data.modules);
-        }
-    }, [data, modules.length]);
+        const fetchRoadmap = async () => {
+            // First check the deeply detailed hardcoded data
+            if (ROADMAP_DETAILS[id]) {
+                const detail = ROADMAP_DETAILS[id];
+                setData(detail);
+                setModules(detail.modules);
+                setLoading(false);
+                return;
+            }
 
+            // Otherwise, look for it in predefined list OR DB
+            let foundRoadmap = PREDEFINED_ROADMAPS.find((r) => String(r.id) === String(id));
+            if (!foundRoadmap) {
+                const dbRoadmaps = await getRoadmaps();
+                foundRoadmap = dbRoadmaps.find((r) => String(r.id) === String(id));
+            }
+
+            if (foundRoadmap) {
+                const generatedModules = foundRoadmap.steps.map((step, index) => ({
+                    id: index + 1,
+                    title: step,
+                    status: index === 0 ? 'in-progress' : 'locked',
+                    topics: [
+                        { name: `${step} Fundamentals`, type: 'video', duration: '45m' },
+                        { name: `Deep Dive into ${step}`, type: 'article', duration: '1h' },
+                        { name: `${step} Practice Project`, type: 'code', duration: '2h' }
+                    ]
+                }));
+
+                setData({
+                    title: foundRoadmap.title,
+                    field: foundRoadmap.field,
+                    color: foundRoadmap.color,
+                    description: `Comprehensive mastery path for becoming a world-class ${foundRoadmap.title}. Covers all essential skills from basics to advanced concepts.`,
+                    modules: generatedModules
+                });
+                setModules(generatedModules);
+            }
+            setLoading(false);
+        };
+        fetchRoadmap();
+    }, [id]);
 
     const handleToggleModule = (moduleId: number) => {
         setModules(prev => {
@@ -483,8 +520,14 @@ export default function RoadmapDetailPage() {
     const completedCount = modules.filter(m => m.status === 'completed').length;
     const progressPercentage = modules.length > 0 ? Math.round((completedCount / modules.length) * 100) : 0;
 
+    if (loading) return (
+        <div className={`min-h-screen flex items-center justify-center font-black italic uppercase tracking-widest ${isDark ? 'bg-black text-white' : 'bg-white text-black'}`}>
+            Loading Roadmap Details...
+        </div>
+    );
+
     if (!data) return (
-        <div className="min-h-screen flex items-center justify-center bg-black text-white font-bold">
+        <div className="min-h-screen flex items-center justify-center bg-black text-white font-bold uppercase">
             Roadmap not found.
         </div>
     );

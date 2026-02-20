@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, Suspense, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { Trophy, Clock, CheckCircle, XCircle, Crown, Medal, Award, Brain, Sparkles, AlertCircle } from 'lucide-react';
 import { useAppContext } from '@/components/AppProvider';
 import { getQuizQuestions, getQuizSessionStatus } from '@/actions/quiz';
+import { getProfile } from '@/actions/profile';
 import { submitAnswerSecure } from '@/actions/quiz-session';
 import { createClient } from '@/utils/supabase/client';
 import { toast } from 'sonner';
@@ -39,40 +40,86 @@ function QuizPlayContent() {
     const [pointsEarned, setPointsEarned] = useState(0);
     const [totalScore, setTotalScore] = useState(0);
 
-    // Leaderboard
+    // Leaderboard & User Profile
     const [leaderboard, setLeaderboard] = useState<any[]>([]);
+    const [myProfile, setMyProfile] = useState<any>(null);
+    const channelRef = useRef<any>(null);
+    const scoreRef = useRef<number>(0);
+
+    // Sync scoreRef
+    useEffect(() => { scoreRef.current = totalScore; }, [totalScore]);
 
     // 1. Fetch Initial Data
     useEffect(() => {
         if (!quizId) return;
         const init = async () => {
-            const [statusRes, questionsRes] = await Promise.all([
+            const [statusRes, questionsRes, profileRes] = await Promise.all([
                 getQuizSessionStatus(quizId),
-                getQuizQuestions(quizId)
+                getQuizQuestions(quizId),
+                getProfile()
             ]);
 
             if (statusRes.data) setQuiz(statusRes.data);
             if (questionsRes.data) setQuestions(questionsRes.data);
+            if (profileRes) setMyProfile(profileRes);
             setLoading(false);
         };
         init();
     }, [quizId]);
 
-    // 2. Real-time Leaderboard & Sync
+    // 2. Real-time Leaderboard & Presence Sync
     useEffect(() => {
-        if (!quizId) return;
+        if (!quizId || !myProfile) return;
 
-        const channel = supabase.channel(`leaderboard_${quizId}`)
-            .on('broadcast', { event: 'score_update' }, ({ payload }) => {
-                setLeaderboard(prev => {
-                    const others = prev.filter(p => p.user_id !== payload.user_id);
-                    return [...others, payload].sort((a, b) => b.score - a.score);
+        let channel: any;
+
+        const setupLive = async () => {
+            channel = supabase.channel(`leaderboard_${quizId}`, {
+                config: {
+                    presence: {
+                        key: myProfile.id,
+                    }
+                }
+            });
+            channelRef.current = channel;
+
+            const updateLeaderboardPresence = () => {
+                const state = channel.presenceState();
+                const presenceUsers = Object.keys(state).map(key => state[key][0]);
+
+                setLeaderboard(() => {
+                    const parsed = presenceUsers.map((u: any) => ({
+                        user_id: u.user_info?.id,
+                        name: u.user_info?.name || 'Participant',
+                        score: u.score || 0
+                    }));
+                    return parsed.sort((a, b) => b.score - a.score);
                 });
-            })
-            .subscribe();
+            };
 
-        return () => { supabase.removeChannel(channel); };
-    }, [quizId]);
+            channel
+                .on('presence', { event: 'sync' }, updateLeaderboardPresence)
+                .on('presence', { event: 'join' }, updateLeaderboardPresence)
+                .on('presence', { event: 'leave' }, updateLeaderboardPresence)
+                .subscribe(async (status: string) => {
+                    if (status === 'SUBSCRIBED') {
+                        await channel.track({
+                            user_info: {
+                                id: myProfile.id,
+                                name: myProfile.handle || myProfile.full_name || 'Participant',
+                            },
+                            score: scoreRef.current
+                        });
+                    }
+                });
+        };
+
+        setupLive();
+
+        return () => {
+            if (channel) supabase.removeChannel(channel);
+        };
+    }, [quizId, myProfile]);
 
     // 3. Central Synchronization Loop
     useEffect(() => {
@@ -144,16 +191,18 @@ function QuizPlayContent() {
             setTotalScore(prev => prev + (result.points || 0));
             setShowResult(true);
 
-            // Broadcast score update to others
-            supabase.channel(`leaderboard_${quizId}`).send({
-                type: 'broadcast',
-                event: 'score_update',
-                payload: {
-                    user_id: 'me', // Real userId would be better but Presence key is used in lobby
-                    name: 'You',
-                    score: totalScore + (result.points || 0)
-                }
-            });
+            const newScore = totalScore + (result.points || 0);
+
+            // Re-sync own score across global multiplayer network via Presence Track
+            if (channelRef.current && myProfile) {
+                channelRef.current.track({
+                    user_info: {
+                        id: myProfile.id,
+                        name: myProfile.handle || myProfile.full_name || 'Participant',
+                    },
+                    score: newScore
+                });
+            }
         } else {
             toast.error(result.error || "Submission rejected");
         }
@@ -165,10 +214,18 @@ function QuizPlayContent() {
         return `${m}:${rs.toString().padStart(2, '0')}`;
     };
 
+    const myId = myProfile?.id || 'me';
+    const trueLeaderboard = [...leaderboard.filter((p: any) => p.user_id !== myId), {
+        user_id: myId,
+        name: myProfile?.handle || myProfile?.full_name || 'You',
+        score: totalScore
+    }].sort((a: any, b: any) => b.score - a.score);
+    const myRank = trueLeaderboard.findIndex((p: any) => p.user_id === myId) + 1;
+
     if (loading || currentQuestionIndex === -1 && quizTimeRemaining > 0) return (
         <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center font-black uppercase italic tracking-[0.4em]">
             <Brain className="w-12 h-12 mb-6 animate-bounce text-amber-500" />
-            Synchronizing Arena State...
+            Loading Quiz State...
         </div>
     );
 
@@ -178,13 +235,13 @@ function QuizPlayContent() {
                 <Antigravity count={100} color="#F59E0B" />
                 <div className="max-w-2xl w-full bg-white/5 border border-white/10 rounded-[4rem] p-16 text-center backdrop-blur-3xl shadow-2xl relative">
                     <Trophy className="w-24 h-24 mx-auto mb-8 text-amber-500 animate-pulse" />
-                    <h1 className="text-6xl font-black mb-4 tracking-tighter italic uppercase">Arena Concluded</h1>
+                    <h1 className="text-6xl font-black mb-4 tracking-tighter italic uppercase">Quiz Concluded</h1>
                     <p className="text-3xl mb-12 font-black italic">Final Score: <span className="text-amber-400">{totalScore}</span></p>
 
-                    <div className="grid grid-cols-2 gap-4 mb-12">
+                    <div className="grid grid-cols-2 gap-4 mb-10">
                         <div className="p-6 rounded-3xl bg-white/5 border border-white/10">
                             <p className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2">Global Rank</p>
-                            <p className="text-4xl font-black italic text-amber-500">TBD</p>
+                            <p className="text-4xl font-black italic text-amber-500">#{myRank}</p>
                         </div>
                         <div className="p-6 rounded-3xl bg-white/5 border border-white/10">
                             <p className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2">Accuracy</p>
@@ -192,11 +249,28 @@ function QuizPlayContent() {
                         </div>
                     </div>
 
+                    <div className="mb-12 text-left bg-black/40 rounded-3xl p-6 border border-white/10">
+                        <h3 className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-4 text-center">Top Performers</h3>
+                        <div className="space-y-3">
+                            {trueLeaderboard.slice(0, 3).map((p, i) => (
+                                <div key={i} className={`flex items-center justify-between p-4 rounded-2xl border ${i === 0 ? 'bg-amber-500/20 border-amber-500/50 text-amber-500' : 'bg-white/5 border-white/10'}`}>
+                                    <div className="flex items-center gap-4">
+                                        <span className={`w-8 h-8 rounded-xl flex items-center justify-center font-black ${i === 0 ? 'bg-amber-500 text-black' : 'bg-white/10'}`}>
+                                            {i + 1}
+                                        </span>
+                                        <span className="font-bold">{p.name} {p.user_id === myId ? '(You)' : ''}</span>
+                                    </div>
+                                    <span className="font-black italic">{p.score} pts</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
                     <button
                         onClick={() => router.push('/quiz')}
                         className="w-full py-6 bg-white text-black hover:bg-amber-500 hover:text-white rounded-[2rem] font-black uppercase tracking-[0.3em] text-xs transition-all shadow-xl active:scale-90"
                     >
-                        Exit Arena
+                        Exit Quiz
                     </button>
                 </div>
             </div>
@@ -235,10 +309,10 @@ function QuizPlayContent() {
 
                             {/* Broadcaster Leaderboard */}
                             <div className="space-y-2 opacity-60">
-                                {leaderboard.map((p, i) => (
-                                    <div key={i} className="flex justify-between items-center p-3 rounded-xl border border-white/5 bg-white/5">
-                                        <span className="text-[10px] font-black italic">#{i + 1} {p.name}</span>
-                                        <span className="text-xs font-black">{p.score}</span>
+                                {trueLeaderboard.map((p, i) => (
+                                    <div key={i} className={`flex justify-between items-center p-3 rounded-xl border ${p.user_id === myId ? 'bg-amber-500/10 border-amber-500/30' : 'border-white/5 bg-white/5'}`}>
+                                        <span className={`text-[10px] font-black italic ${p.user_id === myId ? 'text-amber-500' : ''}`}>#{i + 1} {p.name}</span>
+                                        <span className={`text-xs font-black ${p.user_id === myId ? 'text-amber-500' : ''}`}>{p.score}</span>
                                     </div>
                                 ))}
                             </div>
@@ -306,7 +380,7 @@ function QuizPlayContent() {
                                                             : 'bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/20'
                                                     }`}
                                             >
-                                                <div className={`w-12 h-12 rounded-2xl border-2 flex items-center justify-center font-black text-xl italic flex-shrink-0 transition-colors ${isSelected || showCorrect || showWrong ? 'border-white/40 bg-white/20' : 'border-white/10 opacity-30'}`}>
+                                                <div className={`w-8 h-8 rounded-xl border flex items-center justify-center font-black text-xs italic flex-shrink-0 transition-colors ${isSelected || showCorrect || showWrong ? 'border-white/40 bg-white/20' : 'border-white/10 opacity-30'}`}>
                                                     {String.fromCharCode(65 + index)}
                                                 </div>
                                                 <span className="text-lg font-black uppercase tracking-tight leading-tight pt-1">{option}</span>
@@ -339,7 +413,7 @@ export default function QuizPlayPage() {
         <Suspense fallback={
             <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center">
                 <div className="w-32 h-32 rounded-full border-8 border-amber-500/10 border-t-amber-500 animate-spin mb-8 shadow-[0_0_50px_rgba(245,158,11,0.2)]" />
-                <p className="font-black italic uppercase tracking-[0.5em] animate-pulse">Initializing Play Stream</p>
+                <p className="font-black italic uppercase tracking-[0.5em] animate-pulse">Loading Quiz</p>
             </div>
         }>
             <QuizPlayContent />

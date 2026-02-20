@@ -7,6 +7,7 @@ import { toggleLike, getComments, addComment } from '@/actions/feed';
 import { useState, useRef } from 'react';
 import { toast } from 'sonner';
 import { Send } from 'lucide-react';
+import { supabase } from '@/lib/supabase/client';
 
 interface Post {
   id: string | number;
@@ -47,6 +48,61 @@ const FeedItem: React.FC<{ post: Post; isDark: boolean; currentUser: any }> = ({
     setIsLiked(post.isLiked);
     setCommentsCount(post.comments);
   }, [post.likes, post.isLiked, post.comments]);
+
+  React.useEffect(() => {
+    let isMounted = true;
+
+    // Subscribe to likes
+    const likesChannel = supabase
+      .channel(`post_likes_${post.id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'post_likes',
+        filter: `post_id=eq.${post.id}`
+      }, (payload) => {
+        if (!isMounted) return;
+        if (payload.eventType === 'INSERT') {
+          setLikes(prev => prev + 1);
+          if (currentUser && payload.new.user_id === currentUser.id) setIsLiked(true);
+        } else if (payload.eventType === 'DELETE') {
+          setLikes(prev => Math.max(0, prev - 1));
+          if (currentUser && payload.old.user_id === currentUser.id) setIsLiked(false);
+        }
+      })
+      .subscribe();
+
+    // Subscribe to comments
+    const commentsChannel = supabase
+      .channel(`post_comments_${post.id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'comments',
+        filter: `post_id=eq.${post.id}`
+      }, async (payload) => {
+        if (!isMounted) return;
+        if (payload.eventType === 'INSERT') {
+          setCommentsCount(prev => prev + 1);
+          if (showComments) {
+            const fetchedComments = await getComments(String(post.id));
+            if (isMounted) setComments(fetchedComments);
+          }
+        } else if (payload.eventType === 'DELETE') {
+          setCommentsCount(prev => Math.max(0, prev - 1));
+          if (showComments) {
+            setComments(prev => prev.filter(c => c.id !== payload.old.id));
+          }
+        }
+      })
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(likesChannel);
+      supabase.removeChannel(commentsChannel);
+    };
+  }, [post.id, currentUser, showComments]);
 
   const toggleComments = async () => {
     setShowComments(!showComments);

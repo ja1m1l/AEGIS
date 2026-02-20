@@ -374,7 +374,7 @@ export default function CreateQuizPage() {
                             <div className="w-20 h-20 rounded-[2rem] bg-indigo-500/10 text-indigo-500 flex items-center justify-center mx-auto mb-8">
                                 <Sparkles className="w-10 h-10 animate-pulse" />
                             </div>
-                            <h2 className="text-3xl font-black mb-4 tracking-tight">GEMINI AI GENERATOR</h2>
+                            <h2 className="text-3xl font-black mb-4 tracking-tight">AEGIS QUIZ GENERATOR</h2>
                             <p className="text-sm opacity-50 font-bold mb-10 leading-relaxed uppercase tracking-widest underline decoration-indigo-500/30 underline-offset-8">Generate a full competitive trial in seconds</p>
 
                             <div className="space-y-8 text-left">
@@ -407,8 +407,8 @@ export default function CreateQuizPage() {
                                         <label className="text-[10px] font-black uppercase tracking-widest opacity-40 ml-1">Question Count</label>
                                         <input
                                             type="number"
-                                            value={aiParams.numQuestions}
-                                            onChange={e => setAiParams({ ...aiParams, numQuestions: parseInt(e.target.value) })}
+                                            value={aiParams.numQuestions || ''}
+                                            onChange={e => setAiParams({ ...aiParams, numQuestions: parseInt(e.target.value) || 0 })}
                                             className={`w-full p-4 rounded-2xl border outline-none font-black transition-all ${isDark ? 'bg-black/60 border-white/10 text-white' : 'bg-gray-50 border-gray-200'}`}
                                         />
                                     </div>
@@ -460,7 +460,7 @@ export default function CreateQuizPage() {
                         {loading ? (
                             <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                         ) : (
-                            <><Save className="w-5 h-5 flex-shrink-0" /> {createMode === 'manual' ? 'Finalize Arena' : 'Invoke Gemini Intel'}</>
+                            <><Save className="w-5 h-5 flex-shrink-0" /> {createMode === 'manual' ? 'Finalize Arena' : 'Invoke AEGIS Intel'}</>
                         )}
                     </button>
                 </div>

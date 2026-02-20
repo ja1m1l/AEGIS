@@ -1,12 +1,12 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import React, { useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { ArrowLeft, Trophy, CheckCircle2, Clock, Brain, Play, AlertCircle, Sparkles } from 'lucide-react';
 import { useAppContext } from '@/components/AppProvider';
 import { getQuizSessionStatus, registerForQuiz } from '@/actions/quiz';
+import { createClient } from '@/utils/supabase/client';
 import { toast } from 'sonner';
 
 const Antigravity = dynamic(() => import('@/components/AntigravityInteractive'), {
@@ -34,8 +34,30 @@ export default function QuizDetailPage() {
         };
         fetchStatus();
 
+        const supabase = createClient();
+        const sub = supabase.channel(`quiz_registrations_${id}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'quiz_registrations',
+                    filter: `quiz_id=eq.${id}`
+                },
+                (payload) => {
+                    setQuiz((prev: any) => {
+                        if (!prev) return prev;
+                        return { ...prev, registration_count: prev.registration_count + 1 };
+                    });
+                }
+            )
+            .subscribe();
+
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-        return () => clearInterval(timer);
+        return () => {
+            clearInterval(timer);
+            supabase.removeChannel(sub);
+        };
     }, [id]);
 
     const handleRegister = async () => {
@@ -54,7 +76,7 @@ export default function QuizDetailPage() {
 
         if (!quiz.is_registered) {
             return {
-                text: "Authorize Entry (Register)",
+                text: "Register",
                 disabled: false,
                 action: handleRegister,
                 icon: <CheckCircle2 className="w-4 h-4" />
@@ -62,24 +84,24 @@ export default function QuizDetailPage() {
         }
 
         if (!quiz.scheduled_at) {
-            return { text: "Waiting for Broadcast Schedule...", disabled: true, icon: <Clock className="w-4 h-4" /> };
+            return { text: "Waiting for Schedule...", disabled: true, icon: <Clock className="w-4 h-4" /> };
         }
 
         const scheduledTime = new Date(quiz.scheduled_at);
         const diffMs = scheduledTime.getTime() - currentTime.getTime();
         const diffMins = diffMs / 60000;
 
-        // Requirement: Lobby opens 1 minute before start
-        if (diffMins > 1) {
+        // Requirement: Lobby opens 5 minutes before start
+        if (diffMins > 5) {
             return {
-                text: `Lobby opens in ${Math.ceil(diffMins - 1)} min`,
+                text: `Lobby opens in ${Math.ceil(diffMins - 5)} min`,
                 disabled: true,
                 icon: <Clock className="w-4 h-4" />
             };
         }
 
         return {
-            text: "Engage (Enter Lobby)",
+            text: "Enter Lobby",
             disabled: false,
             action: () => router.push(`/quiz/lobby?id=${id}`),
             icon: <Play className="w-4 h-4 fill-current" />
@@ -90,7 +112,7 @@ export default function QuizDetailPage() {
 
     if (loading) return (
         <div className={`min-h-screen flex items-center justify-center font-black italic uppercase tracking-widest ${isDark ? 'bg-black text-white' : 'bg-white text-black'}`}>
-            <Sparkles className="w-8 h-8 animate-pulse text-amber-500 mr-4" /> Calibrating Arena...
+            <Sparkles className="w-8 h-8 animate-pulse text-amber-500 mr-4" /> Loading Details...
         </div>
     );
 
@@ -142,10 +164,10 @@ export default function QuizDetailPage() {
                         <div className="mb-10 inline-flex flex-col items-center">
                             <div className="px-6 py-3 rounded-2xl bg-amber-500 text-white text-[11px] font-black tracking-widest uppercase flex items-center gap-3 shadow-2xl shadow-amber-500/30">
                                 <Clock className="w-4 h-4" />
-                                Start Channel: {new Date(quiz.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                Start Time: {new Date(quiz.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </div>
                             <span className="text-[9px] mt-4 opacity-30 font-black uppercase tracking-[0.3em]">
-                                Synchronized Global Time
+                                Scheduled Start Time
                             </span>
                         </div>
                     )}
@@ -158,12 +180,12 @@ export default function QuizDetailPage() {
                         <div className={`p-6 rounded-3xl border ${isDark ? 'bg-black/40 border-white/10' : 'bg-gray-50 border-black/5'}`}>
                             <Clock className="w-5 h-5 mx-auto mb-3 opacity-30" />
                             <div className="text-2xl font-black italic">{quiz.duration_minutes || 15}m</div>
-                            <div className="text-[9px] uppercase font-black tracking-widest opacity-30">Trial Limit</div>
+                            <div className="text-[9px] uppercase font-black tracking-widest opacity-30">Time Limit</div>
                         </div>
                         <div className={`p-6 rounded-3xl border ${isDark ? 'bg-black/40 border-white/10' : 'bg-gray-50 border-black/5'}`}>
                             <Users className="w-5 h-5 mx-auto mb-3 opacity-30" />
                             <div className="text-2xl font-black italic">{quiz.registration_count}</div>
-                            <div className="text-[9px] uppercase font-black tracking-widest opacity-30">Combatants</div>
+                            <div className="text-[9px] uppercase font-black tracking-widest opacity-30">Participants</div>
                         </div>
                     </div>
 
@@ -173,9 +195,6 @@ export default function QuizDetailPage() {
                         className={`w-full py-6 rounded-[2rem] font-black uppercase tracking-[0.4em] text-[10px] shadow-2xl transition-all active:scale-95 flex items-center justify-center gap-3 border ${buttonState.disabled
                             ? 'bg-transparent text-white/20 border-white/5 cursor-not-allowed'
                             : 'bg-white text-black hover:bg-amber-500 hover:text-white border-transparent shadow-amber-500/20'
-                        className={`w-full py-5 rounded-[1.5rem] font-black uppercase tracking-[0.25em] text-xs shadow-xl transition-all active:scale-95 flex items-center justify-center gap-3 ${buttonState.disabled
-                            ? 'bg-white/5 text-white/30 cursor-not-allowed border border-white/5'
-                            : 'bg-amber-500 hover:bg-amber-400 text-white shadow-amber-500/20'
                             }`}
                     >
                         {buttonState.icon} {buttonState.text}

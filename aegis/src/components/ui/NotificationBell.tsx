@@ -13,19 +13,74 @@ export default function NotificationBell() {
     const dropdownRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        fetchNotifications();
-        const interval = setInterval(fetchNotifications, 30000);
-        return () => clearInterval(interval);
-    }, []);
+        let isMounted = true;
+        let channel: any;
 
-    useEffect(() => {
+        const setupRealtime = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+
+            if (isMounted) fetchNotifications();
+
+            channel = supabase
+                .channel('notifications_channel')
+                .on('postgres_changes', {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'notifications',
+                    filter: `user_id=eq.${user.id}`
+                }, (payload) => {
+                    const newNotif = payload.new;
+                    if (isMounted) {
+                        setNotifications(prev => [newNotif, ...prev]);
+                        setUnreadCount(prev => prev + 1);
+                    }
+                })
+                .on('postgres_changes', {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'notifications',
+                    filter: `user_id=eq.${user.id}`
+                }, (payload) => {
+                    const updatedNotif = payload.new;
+                    if (isMounted) {
+                        setNotifications(prev => prev.map(n => n.id === updatedNotif.id ? updatedNotif : n));
+                    }
+                })
+                .on('postgres_changes', {
+                    event: 'DELETE',
+                    schema: 'public',
+                    table: 'notifications',
+                    filter: `user_id=eq.${user.id}`
+                }, (payload) => {
+                    const deletedId = payload.old.id;
+                    if (isMounted) {
+                        setNotifications(prev => {
+                            const exists = prev.find(n => n.id === deletedId);
+                            if (exists && !exists.is_read) {
+                                setUnreadCount(c => Math.max(0, c - 1));
+                            }
+                            return prev.filter(n => n.id !== deletedId);
+                        });
+                    }
+                })
+                .subscribe();
+        };
+
+        setupRealtime();
+
         const handleClickOutside = (event: MouseEvent) => {
             if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
                 setIsOpen(false);
             }
         };
         document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
+
+        return () => {
+            isMounted = false;
+            document.removeEventListener('mousedown', handleClickOutside);
+            if (channel) supabase.removeChannel(channel);
+        };
     }, []);
 
     const fetchNotifications = async () => {

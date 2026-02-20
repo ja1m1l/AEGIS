@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Search, Trophy, Clock, Lock } from 'lucide-react';
 import { useAppContext } from '@/components/AppProvider';
 import { getUpcomingQuizzes } from '@/actions/quiz';
+import { createClient } from '@/utils/supabase/client';
 
 export default function QuizPage() {
     const { isDark } = useAppContext();
@@ -22,6 +23,18 @@ export default function QuizPage() {
             setLoading(false);
         };
         fetchQuizzes();
+
+        const supabase = createClient();
+        const channel = supabase
+            .channel('public:quizzes')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'quizzes' }, () => {
+                fetchQuizzes();
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     }, []);
 
     const filteredQuizzes = quizzes.filter(q =>
@@ -38,15 +51,15 @@ export default function QuizPage() {
         <div className={`pt-32 pb-20 px-6 md:px-10 max-w-7xl mx-auto transition-colors duration-500 ${isDark ? 'text-white' : 'text-gray-900'}`}>
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-16 px-4">
                 <div>
-                    <h2 className="text-6xl font-black tracking-tighter transition-colors italic uppercase leading-none">The Arena</h2>
-                    <p className="text-[10px] font-black uppercase tracking-[0.4em] opacity-30 mt-2 underline decoration-amber-500/40 underline-offset-8">Synchronized Combat Trials</p>
+                    <h2 className="text-6xl font-black tracking-tighter transition-colors leading-none">Quizzes</h2>
+                    <p className="text-[10px] font-black uppercase tracking-[0.4em] opacity-30 mt-2 underline decoration-amber-500/40 underline-offset-8">Available Assessments</p>
                 </div>
 
                 <div className={`flex items-center gap-4 px-6 py-4 border rounded-[2rem] w-full md:w-auto transition-all ${isDark ? 'bg-white/5 border-white/10 focus-within:border-indigo-500/50 shadow-2xl' : 'bg-white border-black/10 shadow-sm'}`}>
                     <Search className="w-4 h-4 opacity-30" />
                     <input
                         type="text"
-                        placeholder="FILTER COMPETITIONS..."
+                        placeholder="Search Quizzes..."
                         className="bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-[10px] w-full md:w-64 font-black uppercase tracking-widest placeholder:opacity-20"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
@@ -61,7 +74,7 @@ export default function QuizPage() {
                     ))
                 ) : filteredQuizzes.length === 0 ? (
                     <div className={`col-span-1 md:col-span-2 lg:col-span-3 p-20 text-center font-black text-xs uppercase tracking-[0.3em] opacity-30 ${isDark ? 'text-white' : 'text-black'}`}>
-                        NO TRIALS CURRENTLY BROADCASTING "{searchQuery}"
+                        No upcoming quizzes found relating to "{searchQuery}"
                     </div>
                 ) : (
                     filteredQuizzes.map(q => (
@@ -101,7 +114,7 @@ export default function QuizPage() {
                                         router.push(`/quiz/${q.id}`);
                                     }}
                                 >
-                                    {q.status === 'live' ? <><Play className="w-3 h-3 fill-current" /> Engage</> : 'Register'}
+                                    {q.status === 'live' ? <><Play className="w-3 h-3 fill-current" /> Start Quiz</> : 'Register'}
                                 </button>
                                 <button
                                     className={`w-20 py-5 rounded-[1.8rem] flex items-center justify-center border transition-all active:scale-95 ${isDark ? 'bg-transparent border-white/10 text-white hover:bg-white/5' : 'bg-transparent border-black/10 text-black hover:bg-black/5'
